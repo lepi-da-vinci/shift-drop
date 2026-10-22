@@ -52,6 +52,7 @@ class ShiftDropApp:
         # 1. Initialize UI Radial Window
         self.radial_menu = RadialMenuWindow()
         self.radial_menu.action_completed.connect(self._on_action_completed)
+        self.radial_menu.menu_hidden.connect(self._on_menu_hidden)
 
         # 2. Initialize Background Drag Detector Thread
         self.detector_thread = DragDetectorThread()
@@ -119,6 +120,10 @@ class ShiftDropApp:
         self.mode_convert_action.setChecked(mode == "IMAGE_CONVERT")
         self.mode_tools_action.setChecked(mode == "IMAGE_TOOLS")
 
+    def _on_menu_hidden(self):
+        """Called whenever radial menu closes."""
+        self.detector_thread.reset_trigger()
+
     def _on_drag_triggered(self, x: int, y: int):
         """Called when user drags with left mouse and presses Shift."""
         if not self.radial_menu.isVisible():
@@ -126,8 +131,22 @@ class ShiftDropApp:
 
     def _on_drag_released(self):
         """Called when user releases left mouse button."""
-        # If user released without dropping onto radial menu, hide it
-        if self.radial_menu.isVisible() and not self.radial_menu.underMouse():
+        if self.radial_menu.isVisible():
+            x, y = get_current_cursor_pos()
+            dx = x - (self.radial_menu.x() + self.radial_menu.CENTER_X)
+            dy = y - (self.radial_menu.y() + self.radial_menu.CENTER_Y)
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist > self.radial_menu.R_OUTER:
+                self.radial_menu.hide()
+            else:
+                # If released inside, OLE dropEvent usually handles it immediately.
+                # Safety fallback timer in case OLE drop was cancelled:
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(250, self._ensure_hidden_on_release)
+        self.detector_thread.reset_trigger()
+
+    def _ensure_hidden_on_release(self):
+        if self.radial_menu.isVisible():
             self.radial_menu.hide()
 
     def _test_trigger(self):
@@ -163,7 +182,30 @@ class ShiftDropApp:
         return self.app.exec()
 
 
+def check_single_instance():
+    """Ensure only one instance of ShiftDrop is active to prevent hook collisions."""
+    try:
+        import win32event, winerror, win32api
+        mutex = win32event.CreateMutex(None, False, "ShiftDrop_SingleInstance_App_Mutex")
+        if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+            return None
+        return mutex
+    except Exception:
+        return True
+
+
 if __name__ == "__main__":
+    _app_mutex = check_single_instance()
+    if not _app_mutex:
+        # Already running in background
+        app = QApplication(sys.argv)
+        QMessageBox.information(
+            None,
+            "ShiftDrop",
+            "ShiftDrop is already running in the background!\nCheck the orange 'S' icon in your Windows System Tray (near the clock)."
+        )
+        sys.exit(0)
+
     app = ShiftDropApp()
     sys.exit(app.run())
 

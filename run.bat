@@ -13,3 +13,4 @@ echo Memulai ShiftDrop di background...
 echo Cek icon 'S' oranye di System Tray Windows (pojok kanan bawah dekat jam).
 start "" ".venv\Scripts\pythonw.exe" main.py
 exit
+

@@ -45,6 +45,7 @@ class DragDetectorThread(QThread):
         self._running = True
         self._enabled = True
         self._has_triggered = False
+        self._prev_shift = False
 
     def set_enabled(self, enabled: bool):
         """Toggle active monitoring status."""
@@ -54,6 +55,10 @@ class DragDetectorThread(QThread):
 
     def is_enabled(self) -> bool:
         return self._enabled
+
+    def reset_trigger(self):
+        """Allow triggering again immediately."""
+        self._has_triggered = False
 
     def stop(self):
         """Stop thread execution cleanly."""
@@ -70,12 +75,19 @@ class DragDetectorThread(QThread):
             lbutton_down = is_key_down(VK_LBUTTON)
             shift_down = is_key_down(VK_SHIFT)
 
-            if lbutton_down and shift_down:
-                if not self._has_triggered:
-                    self._has_triggered = True
-                    x, y = get_current_cursor_pos()
-                    self.drag_triggered.emit(x, y)
-            elif not lbutton_down:
+            # Detect Shift key press edge (rising edge)
+            shift_pressed_edge = shift_down and not self._prev_shift
+            self._prev_shift = shift_down
+
+            if lbutton_down:
+                # Trigger when Shift is held, or if Shift is pressed again while dragging
+                if shift_down:
+                    if not self._has_triggered or shift_pressed_edge:
+                        self._has_triggered = True
+                        x, y = get_current_cursor_pos()
+                        self.drag_triggered.emit(x, y)
+            else:
+                # Left mouse released
                 if self._has_triggered:
                     self._has_triggered = False
                     self.drag_released.emit()

@@ -32,22 +32,24 @@ class RadialMenuWindow(QWidget):
     R_INNER = 50
     R_OUTER = 155
 
-    # Signal when an action is completed
+    # Signals
     action_completed = pyqtSignal(str, str)  # (action_name, output_file)
+    menu_hidden = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(self.WINDOW_SIZE, self.WINDOW_SIZE)
 
-        # Frameless, Always on Top, Tool Window (no taskbar item), Translucent
+        # Frameless, Always on Top, Tool Window (no taskbar item), Translucent, No Focus Steal
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.Tool |
+            Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAcceptDrops(True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # File & Mode State
         self.current_file: Optional[str] = None
@@ -63,15 +65,21 @@ class RadialMenuWindow(QWidget):
         # Sectors Configuration
         self.sectors: List[Dict[str, str]] = []
 
-        # Auto-hide timer if dragEnterEvent doesn't fire within 150 ms
+        # Auto-hide timer if dragEnterEvent doesn't fire within 2500 ms (safety fallback)
         self.auto_hide_timer = QTimer(self)
         self.auto_hide_timer.setSingleShot(True)
         self.auto_hide_timer.timeout.connect(self._on_auto_hide_timeout)
         self._drag_entered = False
 
+    def hideEvent(self, event):
+        self.auto_hide_timer.stop()
+        self._drag_entered = False
+        self.menu_hidden.emit()
+        super().hideEvent(event)
+
     def spawn_at(self, cursor_x: int, cursor_y: int):
         """
-        Move window center to cursor coordinates and display it.
+        Move window center to cursor coordinates and display it without stealing focus.
         """
         self._drag_entered = False
         target_x = cursor_x - self.CENTER_X
@@ -84,10 +92,10 @@ class RadialMenuWindow(QWidget):
         self._setup_placeholder_sectors()
         self.show()
         self.raise_()
-        self.activateWindow()
+        self.repaint()
 
-        # Start 150ms timeout: if dragEnter doesn't trigger, user was just clicking/selecting
-        self.auto_hide_timer.start(150)
+        # Generous 2500ms safety timeout (stops as soon as dragEnter fires)
+        self.auto_hide_timer.start(2500)
 
     def _on_auto_hide_timeout(self):
         if not self._drag_entered:
@@ -235,7 +243,8 @@ class RadialMenuWindow(QWidget):
                 local_path = urls[0].toLocalFile()
                 if local_path and os.path.exists(local_path):
                     self.set_file_context(local_path)
-                    event.acceptProposedAction()
+                    event.setDropAction(Qt.DropAction.CopyAction)
+                    event.accept()
                     return
         event.ignore()
 
@@ -250,20 +259,18 @@ class RadialMenuWindow(QWidget):
         if need_update:
             self.update()
 
-        event.acceptProposedAction()
+        event.setDropAction(Qt.DropAction.CopyAction)
+        event.accept()
 
     def dragLeaveEvent(self, event):
         self.active_sector_index = None
         self.is_center_hovered = False
         self.update()
-        # If drag leaves window entirely, hide
-        QTimer.singleShot(100, self._check_hide_on_leave)
-
-    def _check_hide_on_leave(self):
-        if not self.underMouse():
-            self.hide()
+        event.accept()
 
     def dropEvent(self, event):
+        event.setDropAction(Qt.DropAction.CopyAction)
+        event.accept()
         pos = event.position()
         idx, is_center = self._calculate_hit_sector(pos.x(), pos.y())
         self.hide()
@@ -271,15 +278,11 @@ class RadialMenuWindow(QWidget):
         if is_center and self.file_ext != "pdf":
             # Center drop switches mode
             self.toggle_image_mode()
-            event.acceptProposedAction()
             return
 
         if idx is not None and 0 <= idx < len(self.sectors) and self.current_file:
             chosen = self.sectors[idx]["label"]
             self._execute_action(self.current_file, chosen)
-            event.acceptProposedAction()
-        else:
-            event.ignore()
 
     # =========================================================================
     # Action Dispatcher
@@ -330,6 +333,18 @@ class RadialMenuWindow(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 0. Solid hit-target layer (alpha=1, completely invisible to human eye, but ensures
+        # Windows DWM and OLE hit-testing treats the entire radial region as a valid drop target)
+        hit_rect = QRectF(
+            self.CENTER_X - self.R_OUTER - 10,
+            self.CENTER_Y - self.R_OUTER - 10,
+            (self.R_OUTER + 10) * 2,
+            (self.R_OUTER + 10) * 2
+        )
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 1))
+        painter.drawEllipse(hit_rect)
 
         n = len(self.sectors)
         if n == 0:
