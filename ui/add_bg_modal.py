@@ -432,3 +432,4 @@ class AddBgModal(QDialog):
             target_ratio=self.current_ratio
         )
         self.accept()
+

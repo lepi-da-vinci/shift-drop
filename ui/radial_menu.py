@@ -459,3 +459,4 @@ class RadialMenuWindow(QWidget):
                 Qt.AlignmentFlag.AlignCenter,
                 hint_text
             )
+

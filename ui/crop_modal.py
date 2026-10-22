@@ -460,3 +460,4 @@ class CropModal(QDialog):
         crop_box = self.canvas.get_pixel_crop_box()
         self.result_path = crop_image(self.image_path, crop_box)
         self.accept()
+

@@ -166,3 +166,4 @@ class ShiftDropApp:
 if __name__ == "__main__":
     app = ShiftDropApp()
     sys.exit(app.run())
+

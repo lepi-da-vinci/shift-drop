@@ -82,3 +82,4 @@ class DragDetectorThread(QThread):
 
             # ~60 FPS polling interval (16 ms)
             time.sleep(0.016)
+
