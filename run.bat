@@ -1,16 +1,25 @@
 @echo off
-title ShiftDrop
+title ShiftDrop - Radial File Converter & Quick Editor
 cd /d "%~dp0"
 
-if not exist ".venv\Scripts\python.exe" (
-    echo [ERROR] Virtual environment tidak ditemukan.
-    echo Harap jalankan 'python -m venv .venv' dan 'pip install -r requirements.txt' terlebih dahulu.
-    pause
-    exit /b
-)
+echo ========================================================
+echo              ShiftDrop Windows Utility
+echo ========================================================
+echo.
+echo ShiftDrop sedang aktif!
+echo.
+echo [Cara Menggunakan]:
+echo 1. Periksa ikon 'S' oranye di System Tray (dekat jam Windows).
+echo 2. Buka File Explorer, klik & tahan (drag) file gambar atau PDF.
+echo 3. Sambil men-drag, tekan tombol 'Shift' pada keyboard.
+echo 4. Menu radial akan muncul di bawah kursor mouse.
+echo 5. Lepaskan file ke sektor yang diinginkan.
+echo.
+echo [Catatan]:
+echo Biarkan jendela ini tetap terbuka saat menggunakan ShiftDrop.
+echo Tutup jendela ini atau tekan Ctrl+C untuk keluar.
+echo ========================================================
+echo.
 
-echo Memulai ShiftDrop di background...
-echo Cek icon 'S' oranye di System Tray Windows (pojok kanan bawah dekat jam).
-start "" ".venv\Scripts\pythonw.exe" main.py
-exit
-
+".venv\Scripts\python.exe" main.py
+pause
