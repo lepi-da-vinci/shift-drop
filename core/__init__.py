@@ -1,0 +1,1 @@
+# ShiftDrop Core Package
