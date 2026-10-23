@@ -156,10 +156,12 @@ class ShiftDropApp:
         self.radial_menu.spawn_at(x, y)
 
     def _on_cancel_requested(self):
-        """Called when Esc is pressed anywhere to close radial menu."""
+        """Called when Esc is pressed anywhere to navigate back to main view or close."""
         if self.radial_menu.isVisible():
-            self.radial_menu.hide()
-            self.detector_thread.reset_trigger()
+            navigated_back = self.radial_menu.handle_escape_press()
+            if not navigated_back:
+                self.radial_menu.hide()
+                self.detector_thread.reset_trigger()
 
     def _on_action_completed(self, action_name: str, output_path: str):
         if action_name == "Tidak Didukung":

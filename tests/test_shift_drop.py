@@ -165,6 +165,27 @@ class TestShiftDrop(unittest.TestCase):
         self.assertEqual(idx_left, 3)
         self.assertEqual(menu.sectors[idx_left]["label"], "TXT")
 
+    def test_escape_navigation(self):
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication(sys.argv)
+        from ui.radial_menu import RadialMenuWindow
+
+        menu = RadialMenuWindow()
+        menu.set_file_context(self.sample_img_path)
+
+        # Switch to sub-mode (IMAGE_TOOLS)
+        menu.menu_mode = "IMAGE_TOOLS"
+        menu._update_image_sectors()
+
+        # First Esc: should revert to main section (IMAGE_CONVERT) and return True
+        navigated = menu.handle_escape_press()
+        self.assertTrue(navigated)
+        self.assertEqual(menu.menu_mode, "IMAGE_CONVERT")
+
+        # Second Esc: already in main section -> returns False (signals to exit)
+        navigated_again = menu.handle_escape_press()
+        self.assertFalse(navigated_again)
+
     def test_crop_modal_init(self):
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance() or QApplication(sys.argv)

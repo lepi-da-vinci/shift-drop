@@ -200,12 +200,31 @@ class RadialMenuWindow(QWidget):
             self._update_image_sectors()
             self.update()
 
+    def handle_escape_press(self) -> bool:
+        """
+        Handle Esc key navigation:
+        If in a sub-view (e.g. IMAGE_TOOLS / Quick Actions), return to the main
+        conversion view (IMAGE_CONVERT) and return True.
+        If already in the main section, return False so caller can close/exit.
+        """
+        if self.menu_mode == "IMAGE_TOOLS":
+            self.menu_mode = "IMAGE_CONVERT"
+            self._update_image_sectors()
+            self.active_sector_index = None
+            self.is_center_hovered = False
+            self.update()
+            return True
+
+        return False
+
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Space):
-            self.toggle_image_mode()
+        if event.key() == Qt.Key.Key_Escape:
+            if not self.handle_escape_press():
+                self.hide()
             event.accept()
-        elif event.key() == Qt.Key.Key_Escape:
-            self.hide()
+        elif event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Space):
+            if self.is_supported and self.file_ext not in ("pdf", ""):
+                self.toggle_image_mode()
             event.accept()
         else:
             super().keyPressEvent(event)
@@ -320,15 +339,31 @@ class RadialMenuWindow(QWidget):
         action_up = action.upper().strip()
 
         try:
-            if action_up == "CROP":
+            if action_up in ("CROP", "EDIT", "ANNOTATE", "REDACT"):
                 modal = CropModal(file_path)
-                if modal.exec() and modal.result_path:
-                    self.action_completed.emit("Crop Image", modal.result_path)
+                if modal.exec():
+                    if modal.result_path:
+                        self.action_completed.emit("Crop Image", modal.result_path)
+                else:
+                    # User cancelled via Esc or Cancel -> Kembali ke bagian utama!
+                    from core.drag_detector import get_current_cursor_pos
+                    cx, cy = get_current_cursor_pos()
+                    self.menu_mode = "IMAGE_CONVERT"
+                    self.spawn_at(cx, cy)
+                    self.set_file_context(file_path)
 
             elif action_up == "ADD BG":
                 modal = AddBgModal(file_path)
-                if modal.exec() and modal.result_path:
-                    self.action_completed.emit("Add Background", modal.result_path)
+                if modal.exec():
+                    if modal.result_path:
+                        self.action_completed.emit("Add Background", modal.result_path)
+                else:
+                    # User cancelled via Esc or Cancel -> Kembali ke bagian utama!
+                    from core.drag_detector import get_current_cursor_pos
+                    cx, cy = get_current_cursor_pos()
+                    self.menu_mode = "IMAGE_CONVERT"
+                    self.spawn_at(cx, cy)
+                    self.set_file_context(file_path)
 
             elif action_up == "COMPRESS":
                 out = compress_image(file_path)
@@ -337,12 +372,6 @@ class RadialMenuWindow(QWidget):
             elif action_up == "METADATA":
                 out = strip_metadata(file_path)
                 self.action_completed.emit("Strip Metadata", out)
-
-            elif action_up in ("EDIT", "ANNOTATE", "REDACT"):
-                # Default quick edit fallback opens Crop Modal
-                modal = CropModal(file_path)
-                if modal.exec() and modal.result_path:
-                    self.action_completed.emit(action_up, modal.result_path)
 
             else:
                 # Format conversions (DOCX, JPG, PNG, TXT, WEBP, PDF, BMP, etc.)
