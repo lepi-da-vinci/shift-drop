@@ -21,6 +21,12 @@ from ui.crop_modal import CropModal
 from ui.add_bg_modal import AddBgModal
 
 
+SUPPORTED_PDF_EXTS = {"pdf"}
+SUPPORTED_IMAGE_EXTS = {
+    "jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif", "heic", "avif", "gif"
+}
+
+
 class RadialMenuWindow(QWidget):
     """
     Frameless, translucent radial menu positioned directly under the cursor.
@@ -56,8 +62,9 @@ class RadialMenuWindow(QWidget):
         self.file_size_text: str = ""
         self.file_ext: str = ""
         self.file_basename: str = ""
+        self.is_supported: bool = True
 
-        # Modes: 'PDF', 'IMAGE_CONVERT', 'IMAGE_TOOLS'
+        # Modes: 'PDF', 'IMAGE_CONVERT', 'IMAGE_TOOLS', 'UNSUPPORTED'
         self.menu_mode = "IMAGE_CONVERT"
         self.active_sector_index: Optional[int] = None
         self.is_center_hovered = False
@@ -87,6 +94,7 @@ class RadialMenuWindow(QWidget):
         self.move(target_x, target_y)
         self.active_sector_index = None
         self.is_center_hovered = False
+        self.is_supported = True
 
         # Reset sectors to default placeholder until dragEnter identifies file
         self._setup_placeholder_sectors()
@@ -94,8 +102,8 @@ class RadialMenuWindow(QWidget):
         self.raise_()
         self.repaint()
 
-        # Generous 2500ms safety timeout (stops as soon as dragEnter fires)
-        self.auto_hide_timer.start(2500)
+        # Generous 3000ms safety timeout (stops as soon as dragEnter fires)
+        self.auto_hide_timer.start(3000)
 
     def _on_auto_hide_timeout(self):
         if not self._drag_entered:
@@ -114,6 +122,7 @@ class RadialMenuWindow(QWidget):
     def set_file_context(self, file_path: str):
         """
         Analyze dragged file and dynamically populate context-aware radial sectors.
+        Sets is_supported to True (Green) if PDF/image, or False (Red) if unsupported.
         """
         self.current_file = file_path
         if not os.path.exists(file_path):
@@ -130,8 +139,9 @@ class RadialMenuWindow(QWidget):
         else:
             self.file_size_text = f"{size_bytes / 1024:.0f} KB"
 
-        # Determine Context Mode
-        if self.file_ext == "pdf":
+        # Check file format support
+        if self.file_ext in SUPPORTED_PDF_EXTS:
+            self.is_supported = True
             self.menu_mode = "PDF"
             self.sectors = [
                 {"label": "DOCX", "icon": "📄"},
@@ -139,11 +149,21 @@ class RadialMenuWindow(QWidget):
                 {"label": "PNG", "icon": "✨"},
                 {"label": "TXT", "icon": "📝"},
             ]
-        else:
-            # Default to image conversion mode, can toggle to image tools
+        elif self.file_ext in SUPPORTED_IMAGE_EXTS:
+            self.is_supported = True
             if self.menu_mode not in ("IMAGE_CONVERT", "IMAGE_TOOLS"):
                 self.menu_mode = "IMAGE_CONVERT"
             self._update_image_sectors()
+        else:
+            # File cannot be converted / processed
+            self.is_supported = False
+            self.menu_mode = "UNSUPPORTED"
+            self.sectors = [
+                {"label": "TIDAK BISA", "icon": "🚫"},
+                {"label": "DIUBAH", "icon": "✕"},
+                {"label": "FORMAT", "icon": "⚠️"},
+                {"label": "UNSUPPORTED", "icon": "🚫"},
+            ]
 
         self.update()
 
@@ -275,6 +295,13 @@ class RadialMenuWindow(QWidget):
         idx, is_center = self._calculate_hit_sector(pos.x(), pos.y())
         self.hide()
 
+        if not self.is_supported and self.current_file:
+            self.action_completed.emit(
+                "Tidak Didukung",
+                f"File '{self.file_basename}.{self.file_ext}' tidak bisa diubah karena format tidak didukung."
+            )
+            return
+
         if is_center and self.file_ext != "pdf":
             # Center drop switches mode
             self.toggle_image_mode()
@@ -386,10 +413,16 @@ class RadialMenuWindow(QWidget):
             path.closeSubpath()
 
             # Styling
-            if is_active:
-                # Active amber/orange glow
-                fill_color = QColor(255, 120, 20, 240)
-                border_color = QColor(255, 200, 140, 255)
+            if not self.is_supported:
+                # Disabled / Unsupported styling for sectors
+                fill_color = QColor(48, 20, 20, 215)
+                border_color = QColor(239, 68, 68, 110)
+                text_color = QColor(254, 202, 202, 220)
+                border_width = 1.0
+            elif is_active:
+                # Active Emerald Green glow
+                fill_color = QColor(22, 163, 74, 240)
+                border_color = QColor(134, 239, 172, 255)
                 text_color = QColor(255, 255, 255)
                 border_width = 2.0
             else:
@@ -420,7 +453,7 @@ class RadialMenuWindow(QWidget):
             text_rect = QRectF(label_x - 45, label_y - 12, 90, 24)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, full_text)
 
-        # 3. Center Hub (File Icon, Size Badge, Mode Indicator)
+        # 3. Center Hub (File Icon, Size Badge, Mode/Status Indicator)
         center_rect = QRectF(
             self.CENTER_X - self.R_INNER + 2,
             self.CENTER_Y - self.R_INNER + 2,
@@ -428,16 +461,33 @@ class RadialMenuWindow(QWidget):
             (self.R_INNER - 2) * 2
         )
 
-        # Center gradient
+        # Center gradient: HIJAU if supported, MERAH if unsupported
         center_grad = QRadialGradient(QPointF(self.CENTER_X, self.CENTER_Y), self.R_INNER)
-        if self.is_center_hovered:
-            center_grad.setColorAt(0.0, QColor(255, 160, 60, 255))
-            center_grad.setColorAt(1.0, QColor(255, 100, 10, 255))
-            rim_color = QColor(255, 220, 180, 255)
+
+        if not self.is_supported:
+            # 🔴 MERAH: File tidak bisa diubah / format unsupported
+            if self.is_center_hovered:
+                center_grad.setColorAt(0.0, QColor(248, 113, 113, 255))
+                center_grad.setColorAt(1.0, QColor(185, 28, 28, 255))
+                rim_color = QColor(254, 202, 202, 255)
+            else:
+                center_grad.setColorAt(0.0, QColor(239, 68, 68, 250))
+                center_grad.setColorAt(1.0, QColor(153, 27, 27, 250))
+                rim_color = QColor(248, 113, 113, 220)
+            status_text = "TIDAK BISA"
+            badge_icon = "✕"
         else:
-            center_grad.setColorAt(0.0, QColor(255, 140, 25, 245))
-            center_grad.setColorAt(1.0, QColor(230, 90, 10, 245))
-            rim_color = QColor(255, 180, 120, 200)
+            # 🟢 HIJAU: File bisa diubah (PDF / Image yang didukung)
+            if self.is_center_hovered:
+                center_grad.setColorAt(0.0, QColor(74, 222, 128, 255))
+                center_grad.setColorAt(1.0, QColor(21, 128, 61, 255))
+                rim_color = QColor(187, 247, 208, 255)
+            else:
+                center_grad.setColorAt(0.0, QColor(34, 197, 94, 250))
+                center_grad.setColorAt(1.0, QColor(20, 83, 45, 250))
+                rim_color = QColor(74, 222, 128, 220)
+            status_text = "BISA DIUBAH"
+            badge_icon = "✓"
 
         painter.setPen(QPen(rim_color, 2.5))
         painter.setBrush(QBrush(center_grad))
@@ -445,33 +495,35 @@ class RadialMenuWindow(QWidget):
 
         # File Icon / Extension in Center
         painter.setPen(QColor(255, 255, 255))
-        painter.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        center_label = self.file_ext.upper() if self.file_ext else "DROP"
+        painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        if self.file_ext:
+            center_label = f"{badge_icon} {self.file_ext.upper()}"
+        else:
+            center_label = "DROP"
+            
         painter.drawText(
-            QRectF(self.CENTER_X - 40, self.CENTER_Y - 24, 80, 20),
+            QRectF(self.CENTER_X - 44, self.CENTER_Y - 24, 88, 20),
             Qt.AlignmentFlag.AlignCenter,
             center_label
         )
 
         # File Size Pill Badge
         if self.file_size_text:
-            badge_rect = QRectF(self.CENTER_X - 30, self.CENTER_Y - 2, 60, 16)
+            badge_rect = QRectF(self.CENTER_X - 32, self.CENTER_Y - 3, 64, 16)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(0, 0, 0, 70))
+            painter.setBrush(QColor(0, 0, 0, 75))
             painter.drawRoundedRect(badge_rect, 8, 8)
 
             painter.setPen(QColor(255, 255, 255))
             painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Medium))
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, self.file_size_text)
 
-        # Mode hint (Tab / Space toggle)
-        if self.file_ext != "pdf":
-            hint_text = "CONVERT" if self.menu_mode == "IMAGE_CONVERT" else "TOOLS"
-            painter.setPen(QColor(255, 255, 255, 190))
-            painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
-            painter.drawText(
-                QRectF(self.CENTER_X - 40, self.CENTER_Y + 16, 80, 14),
-                Qt.AlignmentFlag.AlignCenter,
-                hint_text
-            )
+        # Mode / Status hint
+        painter.setPen(QColor(255, 255, 255, 230))
+        painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
+        painter.drawText(
+            QRectF(self.CENTER_X - 44, self.CENTER_Y + 16, 88, 14),
+            Qt.AlignmentFlag.AlignCenter,
+            status_text
+        )
 

@@ -39,3 +39,6 @@ Desktop.ini
 htmlcov/
 .pytest_cache/
 
+# other files
+ide.md
+graphify-out/

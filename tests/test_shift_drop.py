@@ -119,6 +119,22 @@ class TestShiftDrop(unittest.TestCase):
         # Test PDF Mode (4 sectors)
         menu.set_file_context(self.sample_pdf_path)
         self.assertEqual(len(menu.sectors), 4)
+        self.assertTrue(menu.is_supported)
+
+        # Test Image Mode (supported)
+        menu.set_file_context(self.sample_img_path)
+        self.assertTrue(menu.is_supported)
+
+        # Test Unsupported file Mode (e.g. .exe or .zip)
+        unsupported_path = os.path.join(self.temp_dir, "app.exe")
+        with open(unsupported_path, "w") as f:
+            f.write("dummy")
+        menu.set_file_context(unsupported_path)
+        self.assertFalse(menu.is_supported)
+        self.assertEqual(menu.menu_mode, "UNSUPPORTED")
+
+        # Re-set to PDF for sector labels testing
+        menu.set_file_context(self.sample_pdf_path)
 
         # Center hit test
         idx, is_center = menu._calculate_hit_sector(180, 180)

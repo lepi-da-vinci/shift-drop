@@ -58,6 +58,7 @@ class ShiftDropApp:
         self.detector_thread = DragDetectorThread()
         self.detector_thread.drag_triggered.connect(self._on_drag_triggered)
         self.detector_thread.drag_released.connect(self._on_drag_released)
+        self.detector_thread.cancel_requested.connect(self._on_cancel_requested)
 
         # 3. Initialize System Tray Icon
         self._init_tray()
@@ -154,7 +155,22 @@ class ShiftDropApp:
         x, y = get_current_cursor_pos()
         self.radial_menu.spawn_at(x, y)
 
+    def _on_cancel_requested(self):
+        """Called when Esc is pressed anywhere to close radial menu."""
+        if self.radial_menu.isVisible():
+            self.radial_menu.hide()
+            self.detector_thread.reset_trigger()
+
     def _on_action_completed(self, action_name: str, output_path: str):
+        if action_name == "Tidak Didukung":
+            self.tray_icon.showMessage(
+                "ShiftDrop",
+                output_path,
+                QSystemTrayIcon.MessageIcon.Warning,
+                3000
+            )
+            return
+
         filename = os.path.basename(output_path)
         self.tray_icon.showMessage(
             "ShiftDrop Complete",

@@ -13,6 +13,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 # Win32 Virtual Key Codes
 VK_LBUTTON = 0x01
 VK_SHIFT = 0x10
+VK_ESCAPE = 0x1B
 
 
 class POINT(ctypes.Structure):
@@ -34,11 +35,12 @@ def is_key_down(vk_code: int) -> bool:
 
 class DragDetectorThread(QThread):
     """
-    Background worker thread polling at ~60 Hz (16 ms) for Drag + Shift events.
+    Background worker thread polling at ~60 Hz (16 ms) for Drag + Shift events and Esc cancel.
     """
     # Signals
     drag_triggered = pyqtSignal(int, int)  # (cursor_x, cursor_y)
     drag_released = pyqtSignal()
+    cancel_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,6 +48,7 @@ class DragDetectorThread(QThread):
         self._enabled = True
         self._has_triggered = False
         self._prev_shift = False
+        self._prev_escape = False
 
     def set_enabled(self, enabled: bool):
         """Toggle active monitoring status."""
@@ -74,20 +77,26 @@ class DragDetectorThread(QThread):
 
             lbutton_down = is_key_down(VK_LBUTTON)
             shift_down = is_key_down(VK_SHIFT)
+            escape_down = is_key_down(VK_ESCAPE)
+
+            # Global Esc detection -> cancel radial menu instantly
+            if escape_down and not self._prev_escape:
+                self.cancel_requested.emit()
+            self._prev_escape = escape_down
 
             # Detect Shift key press edge (rising edge)
             shift_pressed_edge = shift_down and not self._prev_shift
             self._prev_shift = shift_down
 
             if lbutton_down:
-                # Trigger when Shift is held, or if Shift is pressed again while dragging
+                # Trigger when Shift is pressed once while dragging
                 if shift_down:
                     if not self._has_triggered or shift_pressed_edge:
                         self._has_triggered = True
                         x, y = get_current_cursor_pos()
                         self.drag_triggered.emit(x, y)
             else:
-                # Left mouse released
+                # Left mouse released -> drag ended
                 if self._has_triggered:
                     self._has_triggered = False
                     self.drag_released.emit()
