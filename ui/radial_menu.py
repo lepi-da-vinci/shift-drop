@@ -218,10 +218,14 @@ class RadialMenuWindow(QWidget):
         return False
 
     def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Space):
+            self.toggle_image_mode()
         if event.key() == Qt.Key.Key_Escape:
             if not self.handle_escape_press():
                 self.hide()
             event.accept()
+        elif event.key() == Qt.Key.Key_Escape:
+            self.hide()
         elif event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Space):
             if self.is_supported and self.file_ext not in ("pdf", ""):
                 self.toggle_image_mode()
